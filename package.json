@@ -1,5 +1,10 @@
 {
   "dependencies": {
-    "puppeteer": "^10.4.0"
+    "knex": "^0.95.13",
+    "puppeteer": "^10.4.0",
+    "sqlite3": "^5.0.2"
+  },
+  "scripts": {
+    "start": "node src/index.js"
   }
 }
