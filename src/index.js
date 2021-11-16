@@ -1,132 +1,66 @@
 const puppeteer = require('puppeteer');
 const { db } = require('./database/db');
-const { v4: uuid } = require('uuid');
 
 (async () => {
-  let scrapUntilPage = 1;
-
-  const pagesLinks = [];
-  const pagesData = [];
   const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
 
-  await page.goto('https://www.zapimoveis.com.br/venda/');
+  await page.goto(
+    'https://www.vivareal.com.br/venda/rj/rio-de-janeiro/apartamento_residencial/',
+  );
 
-  for (let i = 0; i < scrapUntilPage; i++) {
+  const announceDatas = await page.evaluate(async () => {
     const selector =
-      '#app > section.results__container > div.results__wrapper > div.results__list.js-results > section > ul > li:nth-child(6) > button';
+      '#js-site-main > div.results__container > div.results__content > section > div.results-main__panel.js-list > div.results-list.js-results-list > div > div > article';
 
-    if (i > 0) {
-      await page.waitForSelector(selector);
+    const announces = [...document.querySelectorAll(selector)];
 
-      await page.evaluate(nextArrowSelector => {
-        document.querySelector(nextArrowSelector).click();
-      }, selector);
-    }
+    const announcesData = [];
 
-    await page.waitForTimeout(2000);
-    pagesLinks.push(
-      (await scrapRealEstateURL(page)).map(
-        link => `https://www.zapimoveis.com.br/imovel/${link}`,
-      ),
-    );
-  }
+    let index = 0;
+    for (const announce of announces) {
+      const urlElement = announce.querySelector('a:nth-child(2)');
+      const priceElement = announce.querySelector(
+        'a:nth-child(2) > div > section > div > p',
+      );
+      const titleElement = announce.querySelector(
+        'a:nth-child(2) > div > h2 > span',
+      );
 
-  for (const page of pagesLinks) {
-    for (const realEstateURL of page) {
-      const realEstatePage = await browser.newPage();
-      console.log(realEstateURL);
-      await realEstatePage.goto(realEstateURL);
+      announce.querySelector('.js-phone-lead').click();
 
-      pagesData.push(await scrapRealEstateData(realEstatePage, realEstateURL));
+      await new Promise(r => setTimeout(r, 1000));
 
-      await realEstatePage.close();
-    }
-  }
+      const phone = document.querySelector(
+        '#js-site-main > div.results__container > div.js-decision-lead-vue.vue-lead-form > div > div > section > p > a',
+      );
 
-  console.log(pagesData);
+      const announceData = {
+        url: urlElement.href,
+        price: priceElement ? priceElement.innerText : undefined,
+        title: titleElement ? titleElement.innerText : undefined,
+        phone: phone ? phone.innerText : undefined,
+      };
 
-  // await browser.close();
-})();
+      announcesData.push(announceData);
 
-async function scrapRealEstateURL(page) {
-  return await page.evaluate(() => {
-    const realStates = document.querySelectorAll(
-      '.results__wrapper .listings__container > div',
-    );
-    let dataIds = [];
-
-    realStates.forEach(realState => {
-      const dataId = realState.dataset['id'];
-
-      if (dataId) {
-        dataIds.push(dataId);
-      }
-    });
-
-    return dataIds;
-  });
-}
-
-async function scrapRealEstateData(page, url) {
-  const scrappedData = await page.evaluate(() => {
-    const type = new String(
-      document.querySelector(
-        '#app > div > section > article.main__info.container > div > div.box--flex-grow > div.box--display-flex.box--items-baseline > p > span',
-      ).innerText,
-    ).split(' ')[0];
-
-    const price = document.querySelector(
-      '#app > div > section > article.main__info.container > div > div.box--flex-grow > div.info__base > div > ul.main-prices > li > strong',
-    ).innerText;
-    const location = document.querySelector(
-      '#app > div > section > article.main__info.container > div > div.box--flex-grow > div.box--display-flex.box--items-baseline > p > button > span.link',
-    ).innerText;
-
-    let contact = null;
-
-    if (
-      document.querySelector(
-        '#app > div > section > div.lead-modal-cta.js-mobile-actions-top.lead-modal-cta--mobile > div > div > div > div.lead-wpp > button',
-      )
-    ) {
       document
         .querySelector(
-          '#app > div > section > div.lead-modal-cta.js-mobile-actions-top.lead-modal-cta--mobile > div > div > div > div.lead-wpp > button',
+          '#js-site-main > div.results__container > div.js-decision-lead-vue.vue-lead-form > div > div > section > button',
         )
         .click();
 
-      setTimeout(() => {
-        document
-          .querySelector(
-            '#app > div > section > dialog > main > section > div > div > div > div > div > button',
-          )
-          .click();
+      index++;
 
-        setTimeout(() => {
-          contact = document.querySelector(
-            '#app > div > section > dialog > main > section > div > header > div > div > a',
-          ).innerText;
-          document
-            .querySelector(
-              '#app > div > section > dialog > main > header > button',
-            )
-            .click();
-        }, 2000);
-      }, 2000);
+      await new Promise(r => setTimeout(r, 8000));
     }
 
-    return {
-      price,
-      location,
-      contact,
-      type,
-    };
+    return await Promise.all(scrapAnnouncesPromises);
   });
 
-  return {
-    id: uuid(),
-    url,
-    ...scrappedData,
-  };
-}
+  for (const announceData of announceDatas) {
+    await db('real_estate').insert(announceData);
+  }
+
+  console.log(announceDatas);
+})();
