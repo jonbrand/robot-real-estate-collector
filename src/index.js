@@ -1,10 +1,12 @@
 const puppeteer = require('puppeteer');
 const { db } = require('./database/db');
+const { v4: uuid } = require('uuid');
 
 (async () => {
-  let scrapUntilPage = 5;
+  let scrapUntilPage = 1;
 
-  const pages = [];
+  const pagesLinks = [];
+  const pagesData = [];
   const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
 
@@ -23,18 +25,26 @@ const { db } = require('./database/db');
     }
 
     await page.waitForTimeout(2000);
-
-    pages.push(await scrapRealEstateURL(page));
+    pagesLinks.push(
+      (await scrapRealEstateURL(page)).map(
+        link => `https://www.zapimoveis.com.br/imovel/${link}`,
+      ),
+    );
   }
 
-  for (const page of pages) {
+  for (const page of pagesLinks) {
     for (const realEstateURL of page) {
       const realEstatePage = await browser.newPage();
+      console.log(realEstateURL);
       await realEstatePage.goto(realEstateURL);
 
-      // faz o webscrapping aii
+      pagesData.push(await scrapRealEstateData(realEstatePage, realEstateURL));
+
+      await realEstatePage.close();
     }
   }
+
+  console.log(pagesData);
 
   // await browser.close();
 })();
@@ -56,4 +66,67 @@ async function scrapRealEstateURL(page) {
 
     return dataIds;
   });
+}
+
+async function scrapRealEstateData(page, url) {
+  const scrappedData = await page.evaluate(() => {
+    const type = new String(
+      document.querySelector(
+        '#app > div > section > article.main__info.container > div > div.box--flex-grow > div.box--display-flex.box--items-baseline > p > span',
+      ).innerText,
+    ).split(' ')[0];
+
+    const price = document.querySelector(
+      '#app > div > section > article.main__info.container > div > div.box--flex-grow > div.info__base > div > ul.main-prices > li > strong',
+    ).innerText;
+    const location = document.querySelector(
+      '#app > div > section > article.main__info.container > div > div.box--flex-grow > div.box--display-flex.box--items-baseline > p > button > span.link',
+    ).innerText;
+
+    let contact = null;
+
+    if (
+      document.querySelector(
+        '#app > div > section > div.lead-modal-cta.js-mobile-actions-top.lead-modal-cta--mobile > div > div > div > div.lead-wpp > button',
+      )
+    ) {
+      document
+        .querySelector(
+          '#app > div > section > div.lead-modal-cta.js-mobile-actions-top.lead-modal-cta--mobile > div > div > div > div.lead-wpp > button',
+        )
+        .click();
+
+      setTimeout(() => {
+        document
+          .querySelector(
+            '#app > div > section > dialog > main > section > div > div > div > div > div > button',
+          )
+          .click();
+
+        setTimeout(() => {
+          contact = document.querySelector(
+            '#app > div > section > dialog > main > section > div > header > div > div > a',
+          ).innerText;
+          document
+            .querySelector(
+              '#app > div > section > dialog > main > header > button',
+            )
+            .click();
+        }, 2000);
+      }, 2000);
+    }
+
+    return {
+      price,
+      location,
+      contact,
+      type,
+    };
+  });
+
+  return {
+    id: uuid(),
+    url,
+    ...scrappedData,
+  };
 }
