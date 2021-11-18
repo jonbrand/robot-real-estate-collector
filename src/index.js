@@ -23,7 +23,7 @@ const { db } = require('./database/db');
   }
 
   const flattedPageLinks = pageLinks.flat(Infinity);
-  for (const pageLink of flattedPageLinks.slice(0, 2)) {
+  for (const pageLink of flattedPageLinks) {
     const newPage = await browser.newPage();
     await newPage.goto(pageLink);
 
@@ -51,12 +51,12 @@ const { db } = require('./database/db');
 
     await newPage.click('.js-see-phone');
     await newPage.waitForSelector(
-      '#js-site-main > div.results__container > div.js-decision-lead-vue.vue-lead-form > div > div > section > p > a:last-child',
+      '#js-site-main > div.js-fullscreen-lead-vue.fullsized-lead.vue-lead-form > div > div > section > p > a:last-child',
     );
 
     const contact = await newPage.evaluate(() => {
       const phoneElement = document.querySelector(
-        '#js-site-main > div.results__container > div.js-decision-lead-vue.vue-lead-form > div > div > section > p > a:last-child',
+        '#js-site-main > div.js-fullscreen-lead-vue.fullsized-lead.vue-lead-form > div > div > section > p > a:last-child',
       );
 
       return phoneElement.innerText;
